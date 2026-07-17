@@ -13,3 +13,19 @@ export async function getProfile(): Promise<Profile> {
   if (error) throw error;
   return data as Profile;
 }
+
+export async function updateProfile(patch: {
+  full_name?: string;
+  occupation?: string;
+  city?: string;
+}): Promise<Profile> {
+  const userId = await requireUserId();
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .update(patch)
+    .eq("id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Profile;
+}

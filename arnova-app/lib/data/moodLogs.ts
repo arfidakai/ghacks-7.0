@@ -42,6 +42,34 @@ export async function getRecentMoodLogs(days = 7): Promise<MoodLog[]> {
   return (data ?? []) as MoodLog[];
 }
 
+// Dihitung live dari mood_logs
+export async function getStreakDays(): Promise<number> {
+  const userId = await requireUserId();
+  const since = new Date();
+  since.setDate(since.getDate() - 60);
+
+  const { data, error } = await supabaseAdmin
+    .from("mood_logs")
+    .select("log_date")
+    .eq("user_id", userId)
+    .gte("log_date", since.toISOString().slice(0, 10))
+    .order("log_date", { ascending: false });
+  if (error) throw error;
+
+  const loggedDates = new Set((data ?? []).map((r) => r.log_date as string));
+  const cursor = new Date();
+  if (!loggedDates.has(todayDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let streak = 0;
+  while (loggedDates.has(todayDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 export async function upsertTodayMoodLog(patch: {
   mood?: string;
   energy_score?: number;

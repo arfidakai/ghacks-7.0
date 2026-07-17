@@ -27,6 +27,18 @@ export async function getLatestAssessment(): Promise<Assessment | null> {
   return data as Assessment | null;
 }
 
+export async function listAssessments(limit = 10): Promise<Assessment[]> {
+  const userId = await requireUserId();
+  const { data, error } = await supabaseAdmin
+    .from("assessments")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Assessment[];
+}
+
 export async function createAssessment(input: {
   sleep_quality: number;
   stress_level: number;
