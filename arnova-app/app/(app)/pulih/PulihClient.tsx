@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
-import Link from "next/link";
-import { Play, Pause, ChevronRight, Activity, BedDouble, Music2, BookOpen, User } from "lucide-react";
+import { Play, Pause, ChevronRight, Activity, BedDouble, Music2, ChevronDown } from "lucide-react";
 import { F } from "@/lib/design/tokens";
 import { SectionLabel } from "@/lib/design/primitives";
 import { logRecoverySessionAction } from "./actions";
@@ -42,9 +40,27 @@ const SOUNDS = [
 ];
 
 const GUIDES = [
-  { Icon: Activity, l: "Peregangan Meja", sub: "8 gerakan  ·  10 menit", mins: 10 },
-  { Icon: BedDouble, l: "Rutinitas Tidur", sub: "Winding down  ·  20 menit", mins: 20 },
-  { Icon: Music2, l: "Meditasi Terpandu", sub: "Napas & fokus  ·  15 menit", mins: 15 },
+  { 
+    Icon: Activity, 
+    l: "Peregangan Meja", 
+    sub: "8 gerakan  ·  10 menit", 
+    mins: 10,
+    videoId: "kpdR3BT8o5U" 
+  },
+  { 
+    Icon: BedDouble, 
+    l: "Rutinitas Tidur", 
+    sub: "Winding down  ·  20 menit", 
+    mins: 20,
+    videoId: "wBQSErShw0c"
+  },
+  { 
+    Icon: Music2, 
+    l: "Meditasi Terpandu", 
+    sub: "Napas & fokus  ·  15 menit", 
+    mins: 15,
+    videoId: "QnmLL6YBthM" 
+  },
 ];
 
 export function PulihClient() {
@@ -52,6 +68,7 @@ export function PulihClient() {
   const [activeSound, setActiveSound] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(120);
+  const [activeGuide, setActiveGuide] = useState<number | null>(null); // State untuk mengatur video yg terbuka
 
   useEffect(() => {
     if (activeTimer === null) return;
@@ -88,8 +105,14 @@ export function PulihClient() {
     }
   };
 
-  const openGuide = (g: (typeof GUIDES)[number]) => {
-    logRecoverySessionAction({ session_type: "guide", label: g.l, duration_minutes: g.mins });
+  const openGuide = (index: number, g: (typeof GUIDES)[number]) => {
+    // Jika diklik lagi, tutup video. Jika klik yang lain, buka video yang baru.
+    const isOpening = activeGuide !== index;
+    setActiveGuide(isOpening ? index : null);
+    
+    if (isOpening) {
+      logRecoverySessionAction({ session_type: "guide", label: g.l, duration_minutes: g.mins });
+    }
   };
 
   return (
@@ -198,21 +221,42 @@ export function PulihClient() {
             <SectionLabel>Panduan pemulihan</SectionLabel>
           </div>
           <div className="space-y-3">
-            {GUIDES.map((g) => (
-              <button
-                key={g.l}
-                onClick={() => openGuide(g)}
-                className="w-full p-4 rounded-2xl border border-transparent bg-gradient-to-r from-[#3A86F4]/15 via-[#4894FF]/10 to-transparent hover:from-[#3A86F4]/20 transition-all flex items-center gap-4 text-left shadow-sm"
-              >
-                <div className="w-10 h-10 rounded-2xl bg-white/70 flex items-center justify-center flex-shrink-0 shadow-sm text-[#1E88E5]">
-                  <g.Icon size={18} strokeWidth={2.5} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-[13.5px] font-bold text-[#2C3E50]" style={{ fontFamily: F.body }}>{g.l}</p>
-                  <p className="text-[11.5px] text-[#718096] font-medium mt-0.5" style={{ fontFamily: F.body }}>{g.sub}</p>
-                </div>
-                <ChevronRight size={16} className="text-[#94A3B8]" />
-              </button>
+            {GUIDES.map((g, index) => (
+              <div key={g.l} className="flex flex-col gap-2">
+                <button
+                  onClick={() => openGuide(index, g)}
+                  className="w-full p-4 rounded-2xl border border-transparent bg-gradient-to-r from-[#3A86F4]/15 via-[#4894FF]/10 to-transparent hover:from-[#3A86F4]/20 transition-all flex items-center gap-4 text-left shadow-sm"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-white/70 flex items-center justify-center flex-shrink-0 shadow-sm text-[#1E88E5]">
+                    <g.Icon size={18} strokeWidth={2.5} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[13.5px] font-bold text-[#2C3E50]" style={{ fontFamily: F.body }}>{g.l}</p>
+                    <p className="text-[11.5px] text-[#718096] font-medium mt-0.5" style={{ fontFamily: F.body }}>{g.sub}</p>
+                  </div>
+                  {activeGuide === index ? (
+                    <ChevronDown size={16} className="text-[#3A86F4]" />
+                  ) : (
+                    <ChevronRight size={16} className="text-[#94A3B8]" />
+                  )}
+                </button>
+
+                {/* YOUTUBE IFRAME EMBED */}
+                {activeGuide === index && (
+                  <div className="w-full rounded-2xl overflow-hidden shadow-md border border-[#E2E8F0] bg-[#f8fafc] animate-in fade-in slide-in-from-top-2 duration-300">
+                    <iframe
+                      width="100%"
+                      height="215"
+                      src={`https://www.youtube.com/embed/${g.videoId}?autoplay=1`}
+                      title={g.l}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full"
+                    ></iframe>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
