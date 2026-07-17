@@ -4,6 +4,10 @@ import { requireUserId } from "../auth";
 import { todayDateKey } from "../date-id";
 import type { ChecklistItem, MoodLog } from "./types";
 
+// Last-resort literal kalau bahkan tidak ada Recovery Plan untuk diseed (lihat
+// upsertTodayMoodLog) -- seharusnya nyaris tidak pernah kepakai karena
+// ensureCurrentRecoveryPlan/ensureRecoveryPlanForOnboarding selalu menjamin
+// ada plan sebelum Home bisa diakses.
 export const DEFAULT_CHECKLIST: ChecklistItem[] = [
   { task: "Minum 8 gelas air putih", done: false },
   { task: "Istirahat 5 menit tiap jam", done: false },
@@ -42,6 +46,10 @@ export async function upsertTodayMoodLog(patch: {
   mood?: string;
   energy_score?: number;
   checklist?: ChecklistItem[];
+  // Dipakai saat hari ini belum punya row & patch tidak membawa checklist
+  // eksplisit (mis. setMoodAction) -- diisi caller dari Recovery Plan aktif,
+  // supaya checklist tidak diam-diam jatuh balik ke DEFAULT_CHECKLIST lama.
+  seedChecklist?: ChecklistItem[];
 }): Promise<MoodLog> {
   const userId = await requireUserId();
   const existing = await getTodayMoodLog();
@@ -54,7 +62,7 @@ export async function upsertTodayMoodLog(patch: {
         log_date: todayDateKey(),
         mood: patch.mood ?? existing?.mood ?? null,
         energy_score: patch.energy_score ?? existing?.energy_score ?? null,
-        checklist: patch.checklist ?? existing?.checklist ?? DEFAULT_CHECKLIST,
+        checklist: patch.checklist ?? existing?.checklist ?? patch.seedChecklist ?? DEFAULT_CHECKLIST,
       },
       { onConflict: "user_id,log_date" }
     )

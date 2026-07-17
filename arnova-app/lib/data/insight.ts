@@ -2,16 +2,21 @@ import "server-only";
 import { getRecentMoodLogs } from "./moodLogs";
 import { getLatestAssessment } from "./assessments";
 import { listJournalEntriesSince } from "./journal";
+import { getLatestRecoveryPlan } from "./recoveryPlans";
 import { lastNDateKeys, weekdayShortLabel } from "../date-id";
-import { weeklySummary } from "../ai/gemini";
 import type { JournalScores } from "./types";
+
+const NO_PLAN_FALLBACK_SUMMARY =
+  "Rencana pemulihanmu sedang disiapkan. Isi mood harian di Home supaya kami bisa mempersonalisasinya.";
 
 export type InsightViewModel = {
   metrics: { energy: number; productivity: number; burnoutRisk: number };
   moodByDay: { day: string; value: number }[];
   activeDays: number;
   energyChange: number | null;
-  aiSummary: string;
+  planSummary: string;
+  focusAreas: string[];
+  checklistCompletionPct: number;
 };
 
 function avg(nums: number[]): number | null {
@@ -20,10 +25,14 @@ function avg(nums: number[]): number | null {
 }
 
 export async function getInsightViewModel(): Promise<InsightViewModel> {
-  const [moodLogs, latestAssessment, journalEntries] = await Promise.all([
+  // Regenerasi plan tetap eksklusif urusan Home (ensureCurrentRecoveryPlan) --
+  // Insight hanya membaca plan yang sudah ada, supaya "progress tracking"
+  // selalu merujuk ke Recovery Plan yang sama dengan yang ditampilkan di Home.
+  const [moodLogs, latestAssessment, journalEntries, plan] = await Promise.all([
     getRecentMoodLogs(7),
     getLatestAssessment(),
     listJournalEntriesSince(7),
+    getLatestRecoveryPlan(),
   ]);
 
   const days = lastNDateKeys(7);
@@ -46,21 +55,24 @@ export async function getInsightViewModel(): Promise<InsightViewModel> {
   const energyChange =
     energyScores.length >= 2 ? energyScores[energyScores.length - 1] - energyScores[0] : null;
 
-  const avgJournalScores: JournalScores | null = journalScores.length
-    ? {
-        regulasi_emosi: avg(journalScores.map((s) => s.regulasi_emosi))!,
-        tekanan_kerja: avg(journalScores.map((s) => s.tekanan_kerja))!,
-        resiliensi: avg(journalScores.map((s) => s.resiliensi))!,
-      }
-    : null;
-
-  const aiSummary = await weeklySummary({ moodValsByDay: moodByDay, avgJournalScores });
+  const checklistCounts = moodLogs.reduce(
+    (acc, log) => {
+      acc.total += log.checklist.length;
+      acc.done += log.checklist.filter((t) => t.done).length;
+      return acc;
+    },
+    { total: 0, done: 0 }
+  );
+  const checklistCompletionPct =
+    checklistCounts.total > 0 ? Math.round((checklistCounts.done / checklistCounts.total) * 100) : 0;
 
   return {
     metrics: { energy, productivity, burnoutRisk },
     moodByDay,
     activeDays,
     energyChange,
-    aiSummary,
+    planSummary: plan?.summary ?? NO_PLAN_FALLBACK_SUMMARY,
+    focusAreas: plan?.focus_areas ?? [],
+    checklistCompletionPct,
   };
 }
