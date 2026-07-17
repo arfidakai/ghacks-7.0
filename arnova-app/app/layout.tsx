@@ -22,10 +22,6 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Healthy",
   description: "Mental wellness & productivity tracker",
-  icons: {
-    icon: "/logo-arnova.png",
-    apple: "/logo-arnova.png",
-  },
 };
 
 export default function RootLayout({
