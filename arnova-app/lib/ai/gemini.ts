@@ -1,6 +1,6 @@
 import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { JournalScores } from "../data/types";
+import type { JournalScores, RecoveryTask } from "../data/types";
 
 const apiKey = process.env.GEMINI_API_KEY;
 const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
@@ -65,52 +65,127 @@ Balas HANYA dalam JSON dengan bentuk persis:
   }
 }
 
-export async function homeRecommendation(context: {
-  recentEnergyScores: number[];
-  latestMood: string | null;
-}): Promise<string> {
-  const fallback =
-    "Sempatkan sesi napas dalam 5 menit hari ini untuk menjaga energimu tetap stabil. 🌬️";
-  const model = getModel(false);
-  if (!model) return fallback;
+export type RecoveryPlanContent = {
+  summary: string;
+  focus_areas: string[];
+  checklist: RecoveryTask[];
+};
 
-  const trend = context.recentEnergyScores.join(", ") || "(belum ada data)";
-  const prompt = `Kamu adalah asisten wellness suportif. Tren skor energi mental pengguna 7 hari terakhir (0-100, urut dari lama ke baru): ${trend}. Mood terakhir: ${context.latestMood ?? "(belum diisi)"}.
+export class RecoveryPlanGenerationError extends Error {}
 
-Tulis SATU rekomendasi singkat (maks 2 kalimat, bahasa Indonesia, nada hangat dan personal, boleh pakai 1 emoji) untuk membantu pengguna hari ini. Jangan pakai markdown, jangan beri disclaimer, langsung rekomendasinya saja.`;
+const GENERATE_TIMEOUT_MS = 10_000;
 
-  try {
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim() || fallback;
-  } catch (err) {
-    console.error("Gemini homeRecommendation gagal, pakai fallback:", err);
-    return fallback;
-  }
+function clampString(v: unknown, fallback: string): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s || fallback;
 }
 
-export async function weeklySummary(context: {
-  moodValsByDay: { day: string; value: number }[];
-  avgJournalScores: JournalScores | null;
-}): Promise<string> {
-  const fallback =
-    "Minggu ini energimu relatif stabil. Coba jaga waktu istirahat di hari-hari dengan skor terendah. 🗓️";
-  const model = getModel(false);
-  if (!model) return fallback;
+// Validasi + normalisasi ketat: caller (lib/data/recoveryPlans.ts) menentukan
+// fallback mana yang dipakai berdasarkan apakah fungsi ini throw, jadi output
+// yang lolos ke sini WAJIB berbentuk benar -- tidak boleh best-effort garbage.
+function parseRecoveryPlanContent(raw: string): RecoveryPlanContent {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new RecoveryPlanGenerationError("Gemini mengembalikan JSON yang tidak valid");
+  }
 
-  const days = context.moodValsByDay.map((d) => `${d.day}: ${d.value}`).join(", ");
-  const scores = context.avgJournalScores
-    ? `Rata-rata regulasi emosi ${context.avgJournalScores.regulasi_emosi}, tekanan kerja ${context.avgJournalScores.tekanan_kerja}, resiliensi ${context.avgJournalScores.resiliensi}.`
-    : "Belum ada data jurnal minggu ini.";
+  const obj = parsed as Record<string, unknown>;
+  const summary = clampString(obj.summary, "");
+  if (!summary) throw new RecoveryPlanGenerationError("summary kosong dari Gemini");
 
-  const prompt = `Kamu adalah asisten wellness. Data energi mental mingguan pengguna (0-100): ${days}. ${scores}
+  const focusAreasRaw = Array.isArray(obj.focus_areas) ? obj.focus_areas : [];
+  const focus_areas = focusAreasRaw
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim())
+    .slice(0, 4);
+  if (focus_areas.length === 0) {
+    throw new RecoveryPlanGenerationError("focus_areas kosong dari Gemini");
+  }
 
-Tulis ringkasan mingguan singkat (maks 3 kalimat, bahasa Indonesia, nada hangat, sebutkan hari terbaik dan satu saran konkret untuk minggu depan). Jangan pakai markdown.`;
+  const checklistRaw = Array.isArray(obj.checklist) ? obj.checklist : [];
+  const checklist: RecoveryTask[] = checklistRaw
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && typeof (item as { task?: unknown }).task === "string") {
+        return (item as { task: string }).task;
+      }
+      return null;
+    })
+    .filter((task): task is string => !!task && task.trim().length > 0)
+    .map((task) => ({ task: task.trim() }))
+    .slice(0, 6);
+  if (checklist.length < 3) {
+    throw new RecoveryPlanGenerationError("checklist dari Gemini kurang dari 3 item");
+  }
+
+  return { summary, focus_areas, checklist };
+}
+
+// AI Personal Recovery Planner: satu-satunya sumber rekomendasi + checklist di
+// seluruh aplikasi. Beda dari analyzeJournalEntry, fungsi ini SENGAJA tidak
+// menelan error ke fallback string -- ia throw, supaya lib/data/recoveryPlans.ts
+// bisa memilih antara "pakai plan lama" vs "generate rule-based" sesuai konteks
+// pemanggilnya (lihat komentar di sana).
+export async function generateRecoveryPlan(context: {
+  baseline: {
+    sleep_quality: number;
+    stress_level: number;
+    productivity: number;
+    energy_score: number;
+  };
+  recentMoodLogs: { log_date: string; mood: string | null; energy_score: number | null }[];
+  recentJournalSignal: JournalScores | null;
+  previousPlan: RecoveryPlanContent | null;
+  triggerReason: string;
+}): Promise<RecoveryPlanContent> {
+  const model = getModel(true);
+  if (!model) {
+    throw new RecoveryPlanGenerationError("GEMINI_API_KEY tidak diset");
+  }
+
+  const moodTrend = context.recentMoodLogs.length
+    ? context.recentMoodLogs.map((m) => `${m.log_date}: mood=${m.mood ?? "-"} energi=${m.energy_score ?? "-"}`).join("; ")
+    : "(belum ada catatan mood)";
+
+  const journalSignal = context.recentJournalSignal
+    ? `Rata-rata jurnal terbaru -- regulasi emosi: ${context.recentJournalSignal.regulasi_emosi}, tekanan kerja: ${context.recentJournalSignal.tekanan_kerja}, resiliensi: ${context.recentJournalSignal.resiliensi}.`
+    : "Belum ada data jurnal.";
+
+  const evolutionInstruction = context.previousPlan
+    ? `Ini BUKAN rencana pertama pengguna. Rencana sebelumnya:
+Ringkasan: ${context.previousPlan.summary}
+Fokus: ${context.previousPlan.focus_areas.join(", ")}
+Checklist: ${context.previousPlan.checklist.map((t) => t.task).join("; ")}
+
+Alasan evaluasi ulang: ${context.triggerReason}. EVOLUSIKAN rencana ini -- pertahankan task yang masih relevan/berhasil, ubah atau ganti HANYA bagian yang perlu menyesuaikan kondisi baru. Jangan membuat rencana yang sepenuhnya berbeda kecuali kondisi memang berubah drastis.`
+    : `Ini rencana PERTAMA untuk pengguna ini (baru selesai onboarding), belum ada riwayat sebelumnya.`;
+
+  const prompt = `Kamu adalah "Personal Recovery Planner" -- AI perencana pemulihan mental & produktivitas yang suportif, berbasis bukti, dan personal. Tugasmu membuat SATU Recovery Plan yang koheren untuk pengguna, dalam Bahasa Indonesia.
+
+Data onboarding (skala 1-5, kecuali energy_score 0-100): kualitas tidur=${context.baseline.sleep_quality}, tingkat stres=${context.baseline.stress_level}, produktivitas=${context.baseline.productivity}, skor energi=${context.baseline.energy_score}.
+Tren mood harian terbaru: ${moodTrend}
+${journalSignal}
+
+${evolutionInstruction}
+
+Balas HANYA dalam JSON dengan bentuk persis:
+{"summary": string (1-2 kalimat rekomendasi utama, hangat dan personal, boleh 1 emoji), "focus_areas": string[] (2-4 area fokus singkat, contoh: "Kualitas Tidur", "Manajemen Stres"), "checklist": string[] (3-5 tugas harian konkret dan singkat, dalam Bahasa Indonesia, dapat dikerjakan hari ini)}`;
+
+  const generate = model.generateContent(prompt);
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new RecoveryPlanGenerationError("Gemini timeout")), GENERATE_TIMEOUT_MS)
+  );
 
   try {
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim() || fallback;
+    const result = await Promise.race([generate, timeout]);
+    return parseRecoveryPlanContent(result.response.text());
   } catch (err) {
-    console.error("Gemini weeklySummary gagal, pakai fallback:", err);
-    return fallback;
+    if (err instanceof RecoveryPlanGenerationError) throw err;
+    console.error("Gemini generateRecoveryPlan gagal:", err);
+    throw new RecoveryPlanGenerationError(
+      err instanceof Error ? err.message : "Gemini generateRecoveryPlan gagal"
+    );
   }
 }

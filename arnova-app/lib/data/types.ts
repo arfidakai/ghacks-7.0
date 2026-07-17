@@ -56,3 +56,22 @@ export type EmergencyContact = {
   relation: string | null;
   created_at: string;
 };
+
+// Task template that belongs to a Recovery Plan. Deliberately not ChecklistItem:
+// "done" is a per-day concept that lives in MoodLog.checklist, not on the plan.
+export type RecoveryTask = { task: string };
+
+export type RecoveryPlanSource = "ai" | "rule_based";
+
+export type RecoveryPlan = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  source: RecoveryPlanSource;
+  trigger_reason: string;
+  baseline_energy_score: number | null;
+  baseline_mood: string | null;
+  focus_areas: string[];
+  summary: string;
+  checklist: RecoveryTask[];
+};

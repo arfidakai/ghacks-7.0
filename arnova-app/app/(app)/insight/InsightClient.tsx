@@ -14,7 +14,7 @@ function burnoutBadge(risk: number): string {
 }
 
 export function InsightClient({ data }: { data: InsightViewModel }) {
-  const { metrics, moodByDay, activeDays, energyChange, aiSummary } = data;
+  const { metrics, moodByDay, activeDays, energyChange, planSummary, focusAreas, checklistCompletionPct } = data;
   const peak = Math.max(1, ...moodByDay.map((d) => d.value));
 
   const metricRows = [
@@ -134,24 +134,38 @@ export function InsightClient({ data }: { data: InsightViewModel }) {
           </div>
         </div>
 
-        {/* RINGKASAN AI MINGGUAN */}
+        {/* RENCANA PEMULIHAN */}
         <div className="bg-[#ECF4FF] border border-[#BFDBFE] rounded-2xl p-4.5 shadow-sm relative overflow-hidden">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="w-8 h-8 rounded-2xl bg-[#3A86F4] flex items-center justify-center flex-shrink-0 text-white shadow-sm">
               <Sparkles size={15} />
             </div>
             <span className="inline-block bg-[#3A86F4]/10 text-[#3A86F4] text-[11.5px] font-bold px-2.5 py-0.5 rounded-full border border-[#3A86F4]/20">
-              Rekomendasi AI
+              Rencana Pemulihanmu
             </span>
           </div>
-          <p className="text-[13.5px] font-medium text-[#2C3E50] leading-relaxed mb-4" style={{ fontFamily: F.body }}>
-            {aiSummary}
+          <p className="text-[13.5px] font-medium text-[#2C3E50] leading-relaxed mb-3" style={{ fontFamily: F.body }}>
+            {planSummary}
           </p>
-          
+
+          {focusAreas.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {focusAreas.map((area) => (
+                <span
+                  key={area}
+                  className="inline-block bg-white/70 text-[#1E58D8] text-[10.5px] font-bold px-2.5 py-1 rounded-full border border-white/60"
+                >
+                  {area}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="flex gap-2.5">
             {[
               { l: "Hari Aktif", v: `${activeDays}/7` },
               { l: "Energi Naik", v: energyChangeLabel },
+              { l: "Checklist", v: `${checklistCompletionPct}%` },
               { l: "Risiko", v: `${metrics.burnoutRisk}%` },
             ].map(({ l, v }) => (
               <div key={l} className="flex-1 bg-white/60 rounded-2xl py-2 flex flex-col items-center border border-white/40 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">

@@ -293,7 +293,7 @@ export function OnboardingClient() {
                   transition: "all 0.2s",
                 }}
               >
-                {isPending ? "Menyimpan..." : step < qs.length ? "Lanjut →" : "Lihat Hasil ✨"}
+                {isPending ? "Menyiapkan rencana pemulihanmu..." : step < qs.length ? "Lanjut →" : "Lihat Hasil ✨"}
               </button>
             </div>
           </motion.div>
