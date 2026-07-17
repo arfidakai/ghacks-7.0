@@ -19,7 +19,7 @@ export function BottomNav() {
 
   return (
     <div
-      className="sticky bottom-0 bg-white border-t border-[#E2E8F0] shadow-[0_-4px_25px_rgba(0,0,0,0.04)] rounded-t-[32px] pt-2 px-6 flex justify-between items-center z-50 w-full"
+      className="sticky bottom-0 bg-white border-t border-[#E2E8F0] shadow-[0_-4px_25px_rgba(0,0,0,0.04)] pt-2 px-6 flex justify-between items-center z-50 w-full"
       style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
     >
       {NAV.map(({ href, label, Icon }) => {
