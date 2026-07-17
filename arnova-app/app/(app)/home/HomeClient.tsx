@@ -77,9 +77,9 @@ export function HomeClient({
             <p className="text-[13.5px] text-white/80 mt-0.5" style={{ fontFamily: F.body }}>Semoga harimu berjalan lancar</p>
           </div>
           {/* Badge Otot Kanan Atas */}
-          <div className="w-10 h-10 rounded-full bg-white p-1.5 border border-white/25 flex items-center justify-center backdrop-blur-sm shadow-inner">
+          {/* <div className="w-10 h-10 rounded-full bg-white p-1.5 border border-white/25 flex items-center justify-center backdrop-blur-sm shadow-inner">
             <Image src="/icons/mood-semangat.png" alt="Semangat" width={28} height={28} className="w-full h-full object-contain" />
-          </div>
+          </div> */}
         </div>
 
         {/* Lingkaran Energi / Breathing Blob */}

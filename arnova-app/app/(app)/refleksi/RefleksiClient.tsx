@@ -270,40 +270,41 @@ export function RefleksiClient({ initialEntries }: { initialEntries: JournalEntr
                   <audio ref={recommendedAudioRef} className="hidden" />
                 </div>
               )}
-
-              {/* HISTORI JURNAL SEBELUMNYA */}
-              <div className="mt-2">
-                <SectionLabel>Jurnal Sebelumnya</SectionLabel>
-              </div>
-              <div className="space-y-2.5">
-                {entries
-                  .filter((e) => e.id !== latest?.id)
-                  .map((e) => (
-                    <div key={e.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-sm flex gap-3">
-                      <span className="text-[11.5px] font-bold text-[#A0AEC0] flex-shrink-0 pt-0.5" style={{ fontFamily: F.mono }}>
-                        {formatShortDateLabel(e.entry_date)}
-                      </span>
-                      <div className="flex-1 space-y-1.5">
-                        {e.tags.length > 0 && (
-                          <div className="flex gap-1 flex-wrap">
-                            {e.tags.map((t) => (
-                              <span key={t} className="inline-block bg-[#E3F2FD] text-[#1E88E5] text-[10.5px] font-bold px-2 py-0.5 rounded-2xl">
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <p className="text-[13.5px] text-[#4A5568] leading-normal font-medium" style={{ fontFamily: F.body }}>{e.kejadian}</p>
-                      </div>
-                    </div>
-                  ))}
-                {entries.length === 0 && (
-                  <p className="text-[13.5px] font-semibold text-[#A0AEC0] px-1" style={{ fontFamily: F.body }}>Belum ada jurnal sebelumnya.</p>
-                )}
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* HISTORI JURNAL SEBELUMNYA -- tampil terlepas dari phase, gak perlu
+            isi jurnal baru dulu buat lihat riwayat yang udah ada. */}
+        <div className="mt-2">
+          <SectionLabel>Jurnal Sebelumnya</SectionLabel>
+        </div>
+        <div className="space-y-2.5">
+          {entries
+            .filter((e) => e.id !== latest?.id)
+            .map((e) => (
+              <div key={e.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-sm flex gap-3">
+                <span className="text-[11.5px] font-bold text-[#A0AEC0] flex-shrink-0 pt-0.5" style={{ fontFamily: F.mono }}>
+                  {formatShortDateLabel(e.entry_date)}
+                </span>
+                <div className="flex-1 space-y-1.5">
+                  {e.tags.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {e.tags.map((t) => (
+                        <span key={t} className="inline-block bg-[#E3F2FD] text-[#1E88E5] text-[10.5px] font-bold px-2 py-0.5 rounded-2xl">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[13.5px] text-[#4A5568] leading-normal font-medium" style={{ fontFamily: F.body }}>{e.kejadian}</p>
+                </div>
+              </div>
+            ))}
+          {entries.length === 0 && (
+            <p className="text-[13.5px] font-semibold text-[#A0AEC0] px-1" style={{ fontFamily: F.body }}>Belum ada jurnal sebelumnya.</p>
+          )}
+        </div>
       </div>
 
     </div>
