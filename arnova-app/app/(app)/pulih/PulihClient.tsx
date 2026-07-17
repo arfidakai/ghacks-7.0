@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Play, Pause, ChevronRight, Activity, BedDouble, Music2, ChevronDown } from "lucide-react";
 import { F } from "@/lib/design/tokens";
 import { SectionLabel } from "@/lib/design/primitives";
+import { SOUND_CATALOG, SOUND_ORDER } from "@/lib/sounds";
 import { logRecoverySessionAction } from "./actions";
 
 const TIMERS = [
@@ -12,32 +13,9 @@ const TIMERS = [
   { l: "10 min", sub: "Pemulihan", mins: 10 },
 ];
 
-const SOUNDS = [
-  { 
-    l: "Ombak",
-    icon: (
-      <img src="/icons/ombak.png" alt="Suara Ombak" className="w-6 h-6 object-contain" />
-    )
-  },
-  { 
-    l: "Hujan",
-    icon: (
-      <img src="/icons/hujan.png" alt="Suara Hujan" className="w-6 h-6 object-contain" />
-    )
-  },
-  { 
-    l: "Hutan",
-    icon: (
-      <img src="/icons/hutan.png" alt="Suara Hutan" className="w-6 h-6 object-contain" />
-    )
-  },
-  { 
-    l: "Api Unggun",
-    icon: (
-      <img src="/icons/api.png" alt="Suara Api Unggun" className="w-6 h-6 object-contain" />
-    )
-  },
-];
+// Urutan tampilan + data diambil dari katalog bersama (lib/sounds.ts) supaya
+// path file/ikon tidak duplikat dengan rekomendasi otomatis di halaman Refleksi.
+const SOUNDS = SOUND_ORDER.map((key) => ({ key, ...SOUND_CATALOG[key] }));
 
 const GUIDES = [
   { 
@@ -52,7 +30,7 @@ const GUIDES = [
     l: "Rutinitas Tidur", 
     sub: "Winding down  ·  20 menit", 
     mins: 20,
-    videoId: "wBQSErShw0c"
+    videoId: "4F0TBRp6U3s"
   },
   { 
     Icon: Music2, 
@@ -69,6 +47,7 @@ export function PulihClient() {
   const [playing, setPlaying] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(120);
   const [activeGuide, setActiveGuide] = useState<number | null>(null); // State untuk mengatur video yg terbuka
+  const soundAudioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (activeTimer === null) return;
@@ -97,12 +76,25 @@ export function PulihClient() {
 
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-  const selectSound = (i: number) => {
-    const turningOn = activeSound !== i;
-    setActiveSound(turningOn ? i : null);
-    if (turningOn) {
-      logRecoverySessionAction({ session_type: "sound", label: SOUNDS[i].l });
+ 
+  useEffect(() => {
+    const audio = soundAudioRef.current;
+    if (!audio) return;
+    if (!playing || activeSound === null) {
+      audio.pause();
+      return;
     }
+    audio.src = SOUNDS[activeSound].file;
+    audio.loop = true;
+    audio.play().catch(() => {});
+    logRecoverySessionAction({ session_type: "sound", label: SOUNDS[activeSound].label });
+    return () => audio.pause();
+  }, [playing, activeSound]);
+
+  // Klik kartu suara hanya memilih ambience-nya; pemutarannya sendiri
+  // dikendalikan oleh tombol Play sesi (lihat effect di atas).
+  const selectSound = (i: number) => {
+    setActiveSound((prev) => (prev === i ? null : i));
   };
 
   const openGuide = (index: number, g: (typeof GUIDES)[number]) => {
@@ -173,6 +165,11 @@ export function PulihClient() {
               <p className="text-[13.5px] font-bold text-[#1E88E5] mt-0.5" style={{ fontFamily: F.mono }}>
                 {fmtTime(secondsLeft)}
               </p>
+              {activeSound !== null && (
+                <p className="text-[11px] text-[#3A86F4]/80 font-medium mt-1" style={{ fontFamily: F.body }}>
+                  {SOUNDS[activeSound].emoji} {SOUNDS[activeSound].label} ikut diputar
+                </p>
+              )}
             </div>
             <button
               onClick={() => setPlaying((p) => !p)}
@@ -197,22 +194,26 @@ export function PulihClient() {
               const on = activeSound === i;
               return (
                 <button
-                  key={i}
+                  key={s.key}
                   onClick={() => selectSound(i)}
                   className={`flex items-center gap-3 p-3.5 rounded-2xl border bg-white shadow-sm transition-all text-left ${
                     on ? "border-[#3A86F4] ring-2 ring-[#3A86F4]/10" : "border-[#E2E8F0] hover:border-[#CBD5E1]"
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-transparent flex items-center justify-center flex-shrink-0">
-                    {s.icon}
+                  <div className="w-10 h-10 rounded-2xl bg-transparent flex items-center justify-center flex-shrink-0 relative">
+                    <img src={s.icon} alt={`Suara ${s.label}`} className="w-6 h-6 object-contain" />
+                    {on && playing && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#3A86F4] border-2 border-white animate-pulse" />
+                    )}
                   </div>
                   <span className="text-[13.5px] font-bold text-[#4A5568]" style={{ fontFamily: F.body }}>
-                    {s.l}
+                    {s.label}
                   </span>
                 </button>
               );
             })}
           </div>
+          <audio ref={soundAudioRef} className="hidden" />
         </div>
 
         {/* SECTION: PANDUAN PEMULIHAN GRADIASI */}

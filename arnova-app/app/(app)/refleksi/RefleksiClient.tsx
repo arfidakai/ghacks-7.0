@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import Link from "next/link"; 
-import { ChevronLeft, ArrowRight, Sparkles, BookOpen, Wind, Star, MessageCircle, Heart, Activity, User } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ArrowRight, Sparkles, BookOpen, Wind, Star, MessageCircle, Heart, Activity, User, Play, Pause } from "lucide-react";
 import { C, F } from "@/lib/design/tokens";
 import { Card, SectionLabel, Tag } from "@/lib/design/primitives";
 import { formatShortDateLabel } from "@/lib/date-id";
 import type { JournalEntry } from "@/lib/data/types";
-import { createJournalEntryAction } from "./actions";
+import { SOUND_CATALOG, recommendRecoverySound } from "@/lib/sounds";
+import { createJournalEntryAction, logRecoverySessionAction } from "./actions";
 
 const ALL_TAGS = ["Bersyukur", "Lelah", "Bangga", "Cemas", "Semangat", "Frustrasi", "Fokus", "Sedih"];
 
@@ -20,6 +21,8 @@ export function RefleksiClient({ initialEntries }: { initialEntries: JournalEntr
   const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
   const [latest, setLatest] = useState<JournalEntry | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [recommendedPlaying, setRecommendedPlaying] = useState(false);
+  const recommendedAudioRef = useRef<HTMLAudioElement>(null);
 
   const toggleTag = (t: string) =>
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -34,6 +37,32 @@ export function RefleksiClient({ initialEntries }: { initialEntries: JournalEntr
     } finally {
       setIsPending(false);
     }
+  };
+
+  const recommendation = latest?.ai_scores ? recommendRecoverySound(latest.ai_scores) : null;
+  const recommendedSound = recommendation ? SOUND_CATALOG[recommendation.key] : null;
+
+  // Dipanggil langsung dari tombol "Edit jurnal" (bukan effect) supaya audio
+  // rekomendasi berhenti persis saat pengguna kembali ke mode edit.
+  const backToEdit = () => {
+    recommendedAudioRef.current?.pause();
+    setRecommendedPlaying(false);
+    setPhase("input");
+  };
+
+  const toggleRecommendedSound = () => {
+    const audio = recommendedAudioRef.current;
+    if (!audio || !recommendedSound) return;
+    if (recommendedPlaying) {
+      audio.pause();
+      setRecommendedPlaying(false);
+      return;
+    }
+    audio.src = recommendedSound.file;
+    audio.loop = true;
+    audio.play().catch(() => {});
+    setRecommendedPlaying(true);
+    logRecoverySessionAction({ session_type: "sound", label: recommendedSound.label });
   };
 
   return (
@@ -148,7 +177,7 @@ export function RefleksiClient({ initialEntries }: { initialEntries: JournalEntr
               className="flex flex-col gap-4"
             >
               <button
-                onClick={() => setPhase("input")}
+                onClick={backToEdit}
                 className="flex items-center gap-1 text-[13.5px] font-bold text-[#718096] bg-none border-none p-0 cursor-pointer hover:text-[#3A86F4] transition-colors"
                 style={{ fontFamily: F.body }}
               >
@@ -193,6 +222,52 @@ export function RefleksiClient({ initialEntries }: { initialEntries: JournalEntr
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* PEMULIHAN YANG DIREKOMENDASIKAN */}
+              {recommendedSound && (
+                <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4.5 shadow-sm">
+                  <div className="mb-3">
+                    <SectionLabel>Pemulihan Direkomendasikan</SectionLabel>
+                  </div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-11 h-11 rounded-2xl bg-[#F0F7FF] flex items-center justify-center flex-shrink-0 shadow-inner">
+                      <img
+                        src={recommendedSound.icon}
+                        alt={`Suara ${recommendedSound.label}`}
+                        className="w-7 h-7 object-contain"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[14px] font-bold text-[#2C3E50]" style={{ fontFamily: F.body }}>
+                        {recommendedSound.emoji} {recommendedSound.label}
+                      </p>
+                      <p className="text-[12px] text-[#718096] font-medium mt-0.5 leading-snug" style={{ fontFamily: F.body }}>
+                        {recommendation?.reason}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleRecommendedSound}
+                    className={`w-full py-3 rounded-2xl border-none text-[14px] font-bold flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer active:scale-[0.99] ${
+                      recommendedPlaying
+                        ? "bg-[#ECF4FF] text-[#3A86F4] border border-[#BFDBFE]"
+                        : "bg-gradient-to-r from-[#3A86F4] to-[#60A5FF] text-white shadow-md shadow-[#3A86F4]/20"
+                    }`}
+                    style={{ fontFamily: F.body }}
+                  >
+                    {recommendedPlaying ? (
+                      <>
+                        <Pause size={15} strokeWidth={2.5} /> Jeda Suara
+                      </>
+                    ) : (
+                      <>
+                        <Play size={15} strokeWidth={2.5} /> Putar Suara Rekomendasi
+                      </>
+                    )}
+                  </button>
+                  <audio ref={recommendedAudioRef} className="hidden" />
                 </div>
               )}
 
